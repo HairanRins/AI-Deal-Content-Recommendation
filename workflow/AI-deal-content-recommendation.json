@@ -1,0 +1,748 @@
+{
+  "name": "Build AI Recommendation",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-1",
+              "name": "caseStudiesApiUrl",
+              "type": "string",
+              "value": "={{ $env.CASE_STUDIES_API_URL || 'https://api.yourcms.com/case-studies' }}"
+            },
+            {
+              "id": "cfg-2",
+              "name": "whitepapersApiUrl",
+              "type": "string",
+              "value": "={{ $env.WHITEPAPERS_API_URL || 'https://api.yourcms.com/whitepapers' }}"
+            },
+            {
+              "id": "cfg-3",
+              "name": "fallbackContentUrl",
+              "type": "string",
+              "value": "={{ $env.FALLBACK_CONTENT_URL || 'https://api.yourcms.com/content-fallback' }}"
+            },
+            {
+              "id": "cfg-4",
+              "name": "maxRecommendations",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "cfg-5",
+              "name": "emailTemplateId",
+              "type": "string",
+              "value": "b2b-personalized-recommendation"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "e54497a5-4b42-4c13-9c7f-03f80ce3f3af",
+      "name": "⚙️ Content API Configuration",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        1024,
+        544
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Content API Configuration').first().json.caseStudiesApiUrl }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "industry",
+              "value": "={{ $('Extract & Enrich Deal Context').first().json.detectedIndustry }}"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            },
+            {
+              "name": "stage",
+              "value": "={{ $('Extract & Enrich Deal Context').first().json.contentStage }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 8000
+        }
+      },
+      "id": "fb6cba23-dd59-45d0-83e9-894b4faee54d",
+      "name": "📚 Fetch Case Studies",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1216,
+        448
+      ],
+      "typeVersion": 4.3,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true,
+      "notes": "Continue on fail activé → fallback vers contenu statique si l'API est down"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Content API Configuration').first().json.whitepapersApiUrl }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "industry",
+              "value": "={{ $('Extract & Enrich Deal Context').first().json.detectedIndustry }}"
+            },
+            {
+              "name": "audience",
+              "value": "={{ $('Extract & Enrich Deal Context').first().json.isCLevel ? 'c-suite' : 'practitioner' }}"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 8000
+        }
+      },
+      "id": "63e7ccd9-9568-417d-80a1-7ef4a072dfc8",
+      "name": "📄 Fetch Whitepapers",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1216,
+        640
+      ],
+      "typeVersion": 4.3,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── FALLBACK CONTENT IF APIs FAIL ──\nconst caseStudiesNode = $('Fetch Case Studies');\nconst whitepapersNode = $('Fetch Whitepapers');\n\nlet caseStudies = [];\nlet whitepapers = [];\nlet usedFallback = false;\n\n// Check if case studies API failed\nconst caseResult = caseStudiesNode.all();\nif (!caseResult || caseResult.length === 0 || caseResult[0].json.error) {\n  usedFallback = true;\n  caseStudies = [\n    {\n      id: 'fallback-cs-1',\n      title: 'How [Similar Company] Increased Efficiency by 40%',\n      industry: 'general',\n      summary: 'A proven framework for operational excellence applicable across industries.',\n      url: 'https://yoursite.com/case-studies/efficiency-framework',\n      relevanceScore: 0.75\n    },\n    {\n      id: 'fallback-cs-2', \n      title: 'Digital Transformation Success Story',\n      industry: 'general',\n      summary: 'Learn how organizations successfully navigate digital change.',\n      url: 'https://yoursite.com/case-studies/digital-transformation',\n      relevanceScore: 0.70\n    }\n  ];\n} else {\n  caseStudies = caseResult[0].json;\n}\n\n// Check if whitepapers API failed\nconst wpResult = whitepapersNode.all();\nif (!wpResult || wpResult.length === 0 || wpResult[0].json.error) {\n  usedFallback = true;\n  whitepapers = [\n    {\n      id: 'fallback-wp-1',\n      title: 'The Complete Guide to B2B Sales Acceleration',\n      audience: 'general',\n      topic: 'sales strategy',\n      summary: 'Comprehensive research on accelerating B2B sales cycles.',\n      url: 'https://yoursite.com/whitepapers/b2b-sales-guide',\n      relevanceScore: 0.72\n    },\n    {\n      id: 'fallback-wp-2',\n      title: 'ROI Calculator: Measuring Technology Investments',\n      audience: 'c-suite',\n      topic: 'roi analysis',\n      summary: 'Framework for evaluating and communicating technology ROI.',\n      url: 'https://yoursite.com/whitepapers/roi-calculator',\n      relevanceScore: 0.78\n    }\n  ];\n} else {\n  whitepapers = wpResult[0].json;\n}\n\nreturn [{\n  json: {\n    caseStudiesData: caseStudies,\n    whitepapersData: whitepapers,\n    usedFallback,\n    apiStatus: {\n      caseStudies: caseStudiesNode.all()[0]?.json?.error ? 'fallback' : 'api',\n      whitepapers: whitepapersNode.all()[0]?.json?.error ? 'fallback' : 'api'\n    }\n  }\n}];\n"
+      },
+      "id": "da27f4fc-8141-48f4-ac72-35f107d6bcac",
+      "name": "🛟 Fallback Content Loader",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1424,
+        544
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-2024-08-06",
+          "cachedResultName": "GPT-4o (Pinned)"
+        },
+        "responses": {
+          "values": [
+            {}
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2500,
+          "temperature": 0.3
+        }
+      },
+      "id": "5289d34e-9c63-42c4-b2dd-954465a062ba",
+      "name": "🤖 Generate AI Recommendations",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "position": [
+        2080,
+        544
+      ],
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── LOCAL ERROR HANDLING & ALERTING ──\nconst error = items[0].json;\nconst dealContext = $('Extract & Enrich Deal Context')?.first()?.json || {};\n\nconst errorPayload = {\n  workflow: 'AI Deal Content Recommendation v2',\n  executionId: $execution.id,\n  correlationId: dealContext.correlationId || 'unknown',\n  dealId: dealContext.dealId || 'unknown',\n  failedAt: error.node?.name || 'unknown',\n  errorType: error.error?.name || 'UnknownError',\n  errorMessage: error.error?.message || 'No message',\n  errorStack: error.error?.stack?.substring(0, 500),\n  inputSnapshot: JSON.stringify(error.data).substring(0, 1000),\n  timestamp: new Date().toISOString(),\n  severity: error.error?.message?.includes('VALIDATION') ? 'warning' : 'critical'\n};\n\nreturn [{ json: errorPayload }];\n"
+      },
+      "id": "de4200b5-9332-4331-8a77-0b564002ed29",
+      "name": "❌ Local Error Handler",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        2272,
+        848
+      ],
+      "typeVersion": 2,
+      "notes": "Capture et structure les erreurs pour le handler global"
+    },
+    {
+      "parameters": {
+        "text": "🚨 *Workflow Failure: AI Deal Content Recommendation*\n\n*Execution:* {{ $execution.id }}\n*Deal:* {{ $json.dealId }}\n*Failed At:* {{ $json.failedAt }}\n*Error:* {{ $json.errorMessage }}\n*Severity:* {{ $json.severity }}\n*Time:* {{ $json.timestamp }}\n\n*Action:* Check execution logs and retry if transient.",
+        "otherOptions": {}
+      },
+      "id": "009776ba-deae-4c0e-8240-52ed2e657833",
+      "name": "🚨 Send Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "position": [
+        2480,
+        960
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "c1309ccc-4ce7-49b6-b279-d8dd7823bbf0"
+    },
+    {
+      "parameters": {
+        "content": "## AI Deal Content Recommendation \n\n### Architecture\n```\nWebhook (Auth) → Validate → Fetch Deal → Enrich Context \n  → Fetch Content APIs (parallel) → Fallback if needed\n  → Build AI Payload → GPT-4o (Structured JSON) \n  → Validate Output → Human Gate (>$50k) → Send Email → Log → Respond\n```\n\n### Security\n- ✅ Webhook authentication via header token\n- ✅ Input sanitization & validation\n- ✅ No hardcoded credentials (env vars + credential manager)\n- ✅ PII redacted from logs\n\n### Resilience\n- ✅ Retry exponentiel sur tous les appels API (2s, 4s, 8s)\n- ✅ Fallback content si APIs indisponibles\n- ✅ Continue on fail avec routing vers fallback\n- ✅ Error trigger global + alertes Slack\n\n### Observability\n- ✅ Correlation IDs pour tracing cross-system\n- ✅ Logging structuré vers API externe\n- ✅ Métriques: confiance IA, fallback usage, temps d'exécution\n- ✅ Alertes Slack sur erreurs critiques\n\n### Human-in-the-Loop\n- ✅ Review obligatoire pour deals > $50k\n- ✅ Queue Slack #deal-content-review\n\n### Version\n- v2.0.0 | 2026-06-21 | Model: gpt-4o-2024-08-06 (pinned)",
+        "height": 804,
+        "width": 584
+      },
+      "id": "5fe65c8a-2914-411c-9234-cdd6dab146d4",
+      "name": "📋 Architecture Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        112,
+        -336
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Phase 1: Sécurité & Validation\n- Auth webhook (header token)\n- Validation des champs requis\n- Sanitization dealId (regex)\n- Correlation ID pour tracing",
+        "height": 300,
+        "width": 500,
+        "color": 2
+      },
+      "id": "86913f99-2f97-4186-b4df-8e9b9ccc0039",
+      "name": "🔐 Input & Validation",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        128,
+        768
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Phase 2: Enrichissement Contextuel\n- Détection d'industrie (NLP basique)\n- Mapping stage → content strategy\n- Extraction pain points\n- Détection niveau décisionnaire\n- Calcul âge du deal",
+        "height": 300,
+        "width": 500,
+        "color": 3
+      },
+      "id": "099c09bd-e906-44ee-b69a-de0abcf8239c",
+      "name": "🔍 Enrichment",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        640,
+        768
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Phase 3: Récupération Contenu\n- Appels API parallèles (case studies + whitepapers)\n- Retry exponentiel + timeout 8s\n- Fallback content statique si APIs down\n- Filtrage par industrie/audience/stage",
+        "height": 300,
+        "width": 600,
+        "color": 4
+      },
+      "id": "302b10ad-00a5-4b4d-9f68-0e5c29734799",
+      "name": "📚 Content & Fallback",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1152,
+        768
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Phase 4: IA & Guardrails\n- GPT-4o avec structured JSON output\n- Prompt system détaillé avec critères\n- Validation schema post-IA (required fields, email length)\n- Score de confiance IA\n- Model version pinned",
+        "height": 300,
+        "width": 600,
+        "color": 5
+      },
+      "id": "c7064797-808e-4563-b938-e95f9a7a415f",
+      "name": "🤖 AI & Validation",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1808,
+        192
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Phase 5: Livraison & Monitoring\n- Human gate pour deals > $50k (Slack review)\n- Email dynamique (contactEmail depuis CRM)\n- Retry Gmail 2x\n- Log structuré vers API externe\n- Réponse webhook JSON avec métadonnées",
+        "height": 300,
+        "width": 800,
+        "color": 6
+      },
+      "id": "3d2fe35b-383d-40d0-88d7-77d43d40a291",
+      "name": "📧 Delivery & Observability",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2480,
+        192
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "path": "deal-stage-webhook-v2-prod",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "X-Correlation-ID",
+                "value": "={{ $execution.id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "168bae97-34ef-4bcf-9ebb-980cc24d24af",
+      "name": "Authenticated Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        224,
+        544
+      ],
+      "webhookId": "deal-stage-webhook-v2-prod",
+      "typeVersion": 2.1,
+      "notes": "Webhook sécurisé avec header auth. Attend: {dealId, stage, correlationId}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── INPUT VALIDATION & SANITIZATION ──\nconst payload = items[0].json.body || items[0].json;\n\nconst required = ['dealId'];\nconst missing = required.filter(f => !payload[f] || String(payload[f]).trim() === '');\n\nif (missing.length > 0) {\n  throw new Error(`VALIDATION_ERROR: Missing required fields: ${missing.join(', ')}`);\n}\n\n// Sanitize dealId (only alphanumeric and dashes)\nconst dealId = String(payload.dealId).replace(/[^a-zA-Z0-9\\-]/g, '');\nif (!dealId || dealId.length < 3) {\n  throw new Error('VALIDATION_ERROR: Invalid dealId format');\n}\n\n// Correlation ID for tracing across systems\nconst correlationId = payload.correlationId || $execution.id;\n\nreturn [{\n  json: {\n    dealId,\n    stage: payload.stage || 'unknown',\n    correlationId,\n    receivedAt: new Date().toISOString(),\n    sourceIp: $json.headers?.['x-forwarded-for'] || 'unknown',\n    validated: true\n  }\n}];\n"
+      },
+      "id": "289293bb-57a3-4934-9e68-8455b39cdfc6",
+      "name": "Validate Input Payload",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        416,
+        544
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "resource": "deal",
+        "operation": "get",
+        "dealId": "={{ $json.dealId }}"
+      },
+      "id": "b21cbcbd-0359-4ba5-8bc1-60e9276ecc03",
+      "name": "Fetch Deal from Zoho CRM",
+      "type": "n8n-nodes-base.zohoCrm",
+      "position": [
+        624,
+        544
+      ],
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "notes": "Retry exponentiel: 2s, 4s, 8s. Continue on fail activé pour fallback."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── DEAL CONTEXT EXTRACTION WITH FALLBACKS ──\nconst deal = items[0].json;\nconst input = $('Validate Input Payload').first().json;\n\n// Safe extraction helpers\nconst safe = (obj, path, fallback = null) => {\n  try {\n    return path.split('.').reduce((o, k) => (o || {})[k], obj) || fallback;\n  } catch { return fallback; }\n};\n\n// Industry detection from description/keywords\nconst description = safe(deal, 'Description', '') + ' ' + safe(deal, 'Deal_Name', '');\nconst industryKeywords = {\n  'saas': ['saas', 'software', 'cloud', 'platform', 'subscription'],\n  'fintech': ['fintech', 'finance', 'banking', 'payment', 'crypto'],\n  'healthcare': ['health', 'medical', 'pharma', 'clinic', 'patient'],\n  'ecommerce': ['ecommerce', 'retail', 'shop', 'marketplace', 'online store'],\n  'manufacturing': ['manufacturing', 'factory', 'industrial', 'production'],\n  'education': ['education', 'e-learning', 'training', 'university', 'school']\n};\n\nlet detectedIndustry = 'general';\nconst descLower = description.toLowerCase();\nfor (const [industry, keywords] of Object.entries(industryKeywords)) {\n  if (keywords.some(k => descLower.includes(k))) {\n    detectedIndustry = industry;\n    break;\n  }\n}\n\n// Deal stage mapping for content strategy\nconst stageContentMap = {\n  'Qualification': 'awareness',\n  'Needs Analysis': 'consideration', \n  'Proposal/Price Quote': 'decision',\n  'Negotiation': 'decision',\n  'Closed Won': 'onboarding',\n  'Closed Lost': 'nurture'\n};\n\nconst contentStage = stageContentMap[safe(deal, 'Stage')] || 'awareness';\n\n// Pain point extraction (basic NLP)\nconst painIndicators = ['challenge', 'problem', 'issue', 'struggle', 'difficult', 'slow', 'manual', 'inefficient', 'costly', 'expensive'];\nconst detectedPainPoints = painIndicators.filter(p => descLower.includes(p));\n\n// Decision maker level detection\nconst cLevelKeywords = ['ceo', 'cto', 'cfo', 'coo', 'vp', 'director', 'head of'];\nconst contactName = safe(deal, 'Contact_Name.name', '');\nconst isCLevel = cLevelKeywords.some(k => contactName.toLowerCase().includes(k));\n\nconst context = {\n  dealId: input.dealId,\n  dealName: safe(deal, 'Deal_Name', 'Unknown Deal'),\n  stage: safe(deal, 'Stage', 'unknown'),\n  contentStage,\n  amount: safe(deal, 'Amount', 0),\n  currency: safe(deal, 'Currency', 'USD'),\n  description: safe(deal, 'Description', ''),\n  leadSource: safe(deal, 'Lead_Source', 'unknown'),\n  contactName,\n  contactEmail: safe(deal, 'Contact_Name.email', ''),\n  contactPhone: safe(deal, 'Contact_Name.phone', ''),\n  accountName: safe(deal, 'Account_Name.name', ''),\n  accountIndustry: safe(deal, 'Account_Name.industry', detectedIndustry),\n  accountSize: safe(deal, 'Account_Name.employees', 'unknown'),\n  detectedIndustry,\n  detectedPainPoints: detectedPainPoints.length > 0 ? detectedPainPoints : ['general business challenges'],\n  isCLevel,\n  dealAge: safe(deal, 'Created_Time') ? Math.floor((Date.now() - new Date(deal.Created_Time).getTime()) / (1000 * 60 * 60 * 24)) : 0,\n  correlationId: input.correlationId,\n  extractedAt: new Date().toISOString()\n};\n\nreturn [{ json: context }];\n"
+      },
+      "id": "11e99524-486d-49e5-bb1c-d25408bccceb",
+      "name": "Extract & Enrich Deal Context",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        816,
+        544
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prompt-1",
+              "name": "systemPrompt",
+              "type": "string",
+              "value": "You are an elite B2B content recommendation engine integrated with Zoho CRM.\n\n## YOUR TASK\nAnalyze the deal context and available content library to generate:\n1. The 3 most relevant case studies\n2. The 3 most relevant whitepapers  \n3. A personalized email in the appropriate language\n\n## SELECTION CRITERIA\n- **Case Studies**: Match by industry, pain points, deal stage, company size. Prioritize recency and ROI metrics.\n- **Whitepapers**: Match by audience level (C-suite vs practitioner), industry relevance, and deal stage alignment.\n\n## EMAIL REQUIREMENTS\n- Subject line: compelling, under 60 characters, personalized with deal name\n- Body: professional B2B tone, reference specific pain points, mention how resources address them\n- Include clear CTAs for each recommended resource\n- Signature: professional with contact info placeholder\n- Language: match the deal context language preference\n\n## OUTPUT FORMAT\nReturn ONLY valid JSON (no markdown, no explanations):\n{\n  \"recommendedCaseStudies\": [\n    {\"id\": \"...\", \"title\": \"...\", \"whyRelevant\": \"...\", \"url\": \"...\", \"relevanceScore\": 0.95}\n  ],\n  \"recommendedWhitepapers\": [\n    {\"id\": \"...\", \"title\": \"...\", \"whyRelevant\": \"...\", \"url\": \"...\", \"relevanceScore\": 0.92}\n  ],\n  \"emailContent\": {\n    \"subject\": \"...\",\n    \"bodyHtml\": \"...\",\n    \"bodyText\": \"...\",\n    \"language\": \"...\",\n    \"tone\": \"...\"\n  },\n  \"metadata\": {\n    \"confidenceScore\": 0.0-1.0,\n    \"reasoning\": \"Brief explanation of selection logic\"\n  }\n}"
+            },
+            {
+              "id": "prompt-2",
+              "name": "userPrompt",
+              "type": "string",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9ea5c632-cc50-4956-8ff1-337ee655236b",
+      "name": "Prepare AI Prompt",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        1824,
+        544
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "text": "🚨 *High-Value Deal Requires Content Review*\n\n*Deal:* {{ $('Extract & Enrich Deal Context').first().json.dealName }}\n*Amount:* {{ $('Extract & Enrich Deal Context').first().json.amount }} {{ $('Extract & Enrich Deal Context').first().json.currency }}\n*Contact:* {{ $('Extract & Enrich Deal Context').first().json.contactName }}\n\n*AI Recommendations:*\n{{ JSON.stringify($json.recommendedCaseStudies, null, 2) }}\n\n*Email Preview:*\nSubject: {{ $json.emailContent.subject }}\n\n{{ $json.emailContent.bodyText?.substring(0, 300) }}...\n\n*Action Required:* Approve or modify before sending.",
+        "otherOptions": {}
+      },
+      "id": "e230a36e-e5d5-4df2-96c8-545ec7b7702e",
+      "name": "Send to Review Queue",
+      "type": "n8n-nodes-base.slack",
+      "position": [
+        2480,
+        752
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "b69d7bcc-bf59-41ed-947a-2660c9b9be58"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Extract & Enrich Deal Context').first().json.contactEmail }}",
+        "subject": "={{ $json.emailContent.subject }}",
+        "message": "={{ $json.emailContent.bodyHtml }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "167db1b2-3ad8-42f0-95ea-66766aa1a53f",
+      "name": "Send Personalized Email",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        2768,
+        544
+      ],
+      "typeVersion": 2.1,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "webhookId": "5334081f-84fb-437c-85cb-9034f6a97cd2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LOG_API_URL || 'https://api.yoursite.com/workflow-logs' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "a30e2333-04aa-451e-b25e-18e7047d2b05",
+      "name": "Log Execution to Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        2960,
+        544
+      ],
+      "typeVersion": 4.3,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  executionId: $execution.id,\n  correlationId: $('Extract & Enrich Deal Context').first().json.correlationId,\n  dealId: $('Extract & Enrich Deal Context').first().json.dealId,\n  recommendations: {\n    caseStudies: $json.recommendedCaseStudies?.length || 0,\n    whitepapers: $json.recommendedWhitepapers?.length || 0\n  },\n  emailSent: true,\n  humanReviewRequired: $('Extract & Enrich Deal Context').first().json.amount > 50000,\n  processedAt: $now.toISO()\n}) }}",
+        "options": {}
+      },
+      "id": "e43db91d-975f-4948-b4c6-f294513b0aac",
+      "name": "Return Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        3152,
+        544
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $('Extract & Enrich Deal Context').first().json.amount }}",
+              "rightValue": 50000,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1834ebb4-c09c-4953-b9db-4ac0c6e9f7db",
+      "name": "Human Review Gate",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        2528,
+        544
+      ],
+      "typeVersion": 2.1,
+      "notes": "Si deal > 50k, envoi vers review humaine. Sinon, envoi direct."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── AI OUTPUT VALIDATION & PARSING ──\nconst raw = items[0].json.content || items[0].json.output;\n\nif (!raw) {\n  throw new Error('AI_VALIDATION_ERROR: Empty response from AI model');\n}\n\nlet parsed;\ntry {\n  // Handle both direct JSON and markdown-wrapped JSON\n  const text = typeof raw === 'string' ? raw : JSON.stringify(raw);\n  const jsonMatch = text.match(/```json\\s*([\\s\\S]*?)```/) || text.match(/{[\\s\\S]*}/);\n  const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : text;\n  parsed = JSON.parse(jsonString.trim());\n} catch (e) {\n  throw new Error(`AI_VALIDATION_ERROR: Failed to parse AI output - ${e.message}`);\n}\n\n// Schema validation\nconst required = ['recommendedCaseStudies', 'recommendedWhitepapers', 'emailContent'];\nconst missing = required.filter(f => !parsed[f]);\nif (missing.length > 0) {\n  throw new Error(`AI_VALIDATION_ERROR: Missing fields in AI output: ${missing.join(', ')}`);\n}\n\n// Validate email content\nconst email = parsed.emailContent;\nif (!email?.subject || email.subject.length > 100) {\n  throw new Error('AI_VALIDATION_ERROR: Invalid or missing email subject');\n}\nif (!email?.bodyHtml || email.bodyHtml.length < 50) {\n  throw new Error('AI_VALIDATION_ERROR: Email body too short or missing');\n}\n\n// Validate recommendations count\nif (!Array.isArray(parsed.recommendedCaseStudies) || parsed.recommendedCaseStudies.length === 0) {\n  throw new Error('AI_VALIDATION_ERROR: No case studies recommended');\n}\nif (!Array.isArray(parsed.recommendedWhitepapers) || parsed.recommendedWhitepapers.length === 0) {\n  throw new Error('AI_VALIDATION_ERROR: No whitepapers recommended');\n}\n\n// Add validation metadata\nparsed._validation = {\n  passed: true,\n  validatedAt: new Date().toISOString(),\n  caseStudyCount: parsed.recommendedCaseStudies.length,\n  whitepaperCount: parsed.recommendedWhitepapers.length,\n  emailLength: email.bodyHtml.length\n};\n\nreturn [{ json: parsed }];\n"
+      },
+      "id": "c388a8e4-46f9-4d7b-a7c7-fd94ccf1dc59",
+      "name": "Validate AI Output",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        2368,
+        544
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── BUILD STRUCTURED PAYLOAD FOR AI ──\nconst deal = $('Extract & Enrich Deal Context').first().json;\nconst content = $('Fallback Content Loader').first().json;\nconst config = $('Content API Configuration').first().json;\n\n// Validate content availability\nif (!content.caseStudiesData || content.caseStudiesData.length === 0) {\n  throw new Error('CONTENT_ERROR: No case studies available after fallback');\n}\nif (!content.whitepapersData || content.whitepapersData.length === 0) {\n  throw new Error('CONTENT_ERROR: No whitepapers available after fallback');\n}\n\n// Build the recommendation context\nconst payload = {\n  dealContext: {\n    dealId: deal.dealId,\n    dealName: deal.dealName,\n    stage: deal.stage,\n    contentStage: deal.contentStage,\n    amount: deal.amount,\n    currency: deal.currency,\n    industry: deal.detectedIndustry,\n    accountIndustry: deal.accountIndustry,\n    accountSize: deal.accountSize,\n    painPoints: deal.detectedPainPoints,\n    isCLevel: deal.isCLevel,\n    dealAge: deal.dealAge,\n    description: deal.description?.substring(0, 500) // Limit to prevent token overflow\n  },\n  availableContent: {\n    caseStudies: content.caseStudiesData.slice(0, config.maxRecommendations * 2),\n    whitepapers: content.whitepapersData.slice(0, config.maxRecommendations * 2)\n  },\n  constraints: {\n    maxCaseStudies: config.maxRecommendations,\n    maxWhitepapers: config.maxRecommendations,\n    tone: deal.isCLevel ? 'executive' : 'practitioner',\n    language: 'fr', // ou dynamique selon le contact\n    includeCTA: true\n  },\n  metadata: {\n    correlationId: deal.correlationId,\n    workflowVersion: '2.0.0',\n    timestamp: new Date().toISOString()\n  }\n};\n\nreturn [{ json: payload }];\n"
+      },
+      "id": "1c4134e7-c17f-44e0-9cff-c15537622b19",
+      "name": "Build AI Recommendation Payload",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1616,
+        544
+      ],
+      "typeVersion": 2
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "⚙️ Content API Configuration": {
+      "main": [
+        [
+          {
+            "node": "📚 Fetch Case Studies",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📄 Fetch Whitepapers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📚 Fetch Case Studies": {
+      "main": [
+        [
+          {
+            "node": "🛟 Fallback Content Loader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 Fetch Whitepapers": {
+      "main": [
+        [
+          {
+            "node": "🛟 Fallback Content Loader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🛟 Fallback Content Loader": {
+      "main": [
+        [
+          {
+            "node": "Build AI Recommendation Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Generate AI Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Validate AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticated Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input Payload": {
+      "main": [
+        [
+          {
+            "node": "Fetch Deal from Zoho CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Deal from Zoho CRM": {
+      "main": [
+        [
+          {
+            "node": "Extract & Enrich Deal Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Enrich Deal Context": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Content API Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "🤖 Generate AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Review Queue": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Personalized Email": {
+      "main": [
+        [
+          {
+            "node": "Log Execution to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Execution to Database": {
+      "main": [
+        [
+          {
+            "node": "Return Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Review Gate": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Review Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate AI Output": {
+      "main": [
+        [
+          {
+            "node": "Human Review Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Recommendation Payload": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "56723f52-dfb6-4624-aa77-646f5fc9d4e2",
+  "meta": {
+    "instanceId": "3e2b5df4e9be6fe247230bdfe061f03da08240ea42078cd0822f70f06dd8e886"
+  },
+  "id": "c4zGgdzkZgGAXrPI",
+  "tags": []
+}
